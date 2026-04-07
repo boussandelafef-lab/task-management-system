@@ -1,4 +1,4 @@
-<?php 
+<?php syntax error !!!
 session_start();
 if (isset($_SESSION['role']) && isset($_SESSION['id']) ) {
 
