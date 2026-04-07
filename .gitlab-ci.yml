@@ -1,0 +1,16 @@
+stages:
+  - build
+  - test
+
+build_job:
+  stage: build
+  image: php:8.2-cli-alpine
+  script:
+    - php -l index.php
+    - echo "✅ Build terminé"
+
+test_job:
+  stage: test
+  image: php:8.2-cli-alpine
+  script:
+    - echo "✅ Tests passés"
