@@ -137,46 +137,37 @@ deploy_job:
   before_script:
     - apk add --no-cache docker-compose curl
   script:
-    - echo "🚀 DEPLOY STAGING ON CODESPACES"
+    - echo "DEPLOY STAGING ON CODESPACES"
     - docker-compose up -d --build
-    - sleep 20
-    - docker ps
-    - docker-compose ps
-    - docker-compose logs
-    - docker exec $(docker ps -qf "name=web") curl -f http://localhost || exit 1
-    - echo "✅ STAGING OK"
+    - sleep 30
+    - docker ps -a
+    - CONTAINER_ID=$(docker ps -qf "name=web")
+    - echo "Web container ID: $CONTAINER_ID"
+    - if [ -z "$CONTAINER_ID" ]; then echo "No web container" && exit 1; fi
+    - docker exec $CONTAINER_ID curl -f http://localhost || exit 1
+    - echo "STAGING OK"
   environment:
     name: staging
     url: http://localhost:8080
 
-# ==================== STAGE 6: PERFORMANCE (ULTRA SIMPLE) ====================
+# ==================== STAGE 6: PERFORMANCE ====================
 performance_job:
   stage: performance
   image: alpine:latest
   before_script:
     - apk add --no-cache curl
   script:
-    - echo "📊 PERFORMANCE TEST"
-    # Tester simplement que l'application répond
-    - echo "Testing application availability..."
-    - for i in 1 2 3 4 5 6 7 8 9 10; do
-        if curl -s -f http://localhost:8080/ > /dev/null; then
-          echo "✅ Application is responding";
-          break;
-        fi;
-        echo "Waiting for application... ($i/10)";
-        sleep 3;
-      done
-    # Test simple avec curl (mesure le temps de réponse)
-    - echo "Measuring response time..."
-    - curl -o /dev/null -s -w "Response time: %{time_total}s\n" http://localhost:8080/ > performance.txt
-    - curl -o /dev/null -s -w "Response time (with load): %{time_total}s\n" http://localhost:8080/ >> performance.txt
-    - echo "✅ PERFORMANCE TEST DONE"
+    - echo "PERFORMANCE TEST"
+    - sleep 5
+    - curl -s -o /dev/null -w "Response time: %{time_total}s\n" http://localhost:8080/ > performance.txt
+    - curl -s -o /dev/null -w "Second request: %{time_total}s\n" http://localhost:8080/ >> performance.txt
     - cat performance.txt
+    - echo "PERFORMANCE TEST DONE"
   artifacts:
     paths:
       - performance.txt
   allow_failure: true
+
 # ==================== STAGE 7: SECURITY ====================
 security_job:
   stage: security
@@ -184,9 +175,9 @@ security_job:
   before_script:
     - apk add --no-cache grep
   script:
-    - echo "🔒 SECURITY CHECK"
-    - grep -r "SELECT.*\$_GET" . && echo "⚠️ SQL RISK" || echo "✅ No SQL injection patterns found"
-    - grep -r "password.*=.*['\"]" . --include="*.php" && echo "⚠️ Possible hardcoded passwords" || echo "✅ No obvious hardcoded passwords"
+    - echo "SECURITY CHECK"
+    - grep -r "SELECT.*\$_GET" . --include="*.php" && echo "SQL RISK" || echo "No SQL injection patterns"
+    - grep -r "password.*=.*['\"]" . --include="*.php" | grep -v "password_hash" && echo "Hardcoded passwords?" || echo "OK"
   allow_failure: true
 
 # ==================== STAGE 8: CANARY ====================
@@ -198,11 +189,11 @@ canary_job:
   before_script:
     - apk add --no-cache docker-compose
   script:
-    - echo "🐦 CANARY DEPLOY"
+    - echo "CANARY DEPLOY"
     - docker-compose -f docker-compose.canary.yml up -d --build
     - sleep 10
     - docker ps
-    - echo "✅ CANARY DEPLOYMENT DONE"
+    - echo "CANARY DEPLOYMENT DONE"
   environment:
     name: canary
     url: http://localhost:8081
@@ -217,12 +208,13 @@ deploy_prod_job:
   before_script:
     - apk add --no-cache docker-compose
   script:
-    - echo "🏭 PRODUCTION DEPLOY"
+    - echo "PRODUCTION DEPLOY"
     - docker-compose down
     - docker-compose up -d --build
     - sleep 15
-    - docker exec $(docker ps -qf "name=web") curl -f http://localhost || exit 1
-    - echo "✅ PRODUCTION OK"
+    - CONTAINER_ID=$(docker ps -qf "name=web")
+    - docker exec $CONTAINER_ID curl -f http://localhost || exit 1
+    - echo "PRODUCTION OK"
   environment:
     name: production
     url: http://localhost:8080
