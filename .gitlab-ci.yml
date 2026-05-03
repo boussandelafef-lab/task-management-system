@@ -114,7 +114,7 @@ test_job:
       $user = $pdo->query("SELECT id FROM users WHERE username=\"sarah\"")->fetch(PDO::FETCH_ASSOC);
 
       $stmt = $pdo->prepare("INSERT INTO tasks (title, description, assigned_to, due_date, status)
-        VALUES (?, ?, ?, ?, ?)");
+      VALUES (?, ?, ?, ?, ?)");
 
       $stmt->execute([
         "Complete monthly report",
@@ -138,8 +138,8 @@ quality_job:
   allow_failure: true
   script:
     - echo "Quality check"
-    - grep -r "password_hash" app/ || echo "OK password_hash"
-    - grep -r "prepare(" app/ || echo "Warning: missing prepare statements"
+    - grep -r "password_hash" app/ || echo "OK"
+    - grep -r "prepare(" app/ || echo "Warning missing prepare statements"
     - echo "Quality done"
 
 # =========================
@@ -154,8 +154,7 @@ package_job:
 
   script:
     - echo "Creating package"
-    - zip -r employee-task-management.zip . \
-      -x "vendor/*" ".git/*" "node_modules/*"
+    - zip -r employee-task-management.zip . -x "vendor/*" ".git/*" "node_modules/*"
     - echo "Package created"
 
   artifacts:
@@ -185,7 +184,7 @@ deploy_job:
 
       docker ps
 
-      CONTAINER_ID=$(docker ps -qf 'name=web')
+      CONTAINER_ID=$(docker ps --filter "name=web" -q)
 
       if [ -z "$CONTAINER_ID" ]; then
         echo "ERROR: web container not found"
@@ -284,7 +283,7 @@ deploy_prod_job:
       docker-compose up -d --build
       sleep 20
 
-      CONTAINER_ID=$(docker ps -qf 'name=web')
+      CONTAINER_ID=$(docker ps --filter "name=web" -q)
 
       if [ -z "$CONTAINER_ID" ]; then
         echo "ERROR: no container found"
