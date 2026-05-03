@@ -153,8 +153,8 @@ performance_job:
   script:
     - echo "PERFORMANCE TEST"
     - sleep 5
-    - curl -s -o /dev/null -w 'Response time: %{time_total}s\n' http://localhost:8080/ > performance.txt
-    - curl -s -o /dev/null -w 'Second request: %{time_total}s\n' http://localhost:8080/ >> performance.txt
+    - curl -s -o /dev/null -w "Response time: %{time_total}s\n" http://localhost:8080/ > performance.txt
+    - curl -s -o /dev/null -w "Second request: %{time_total}s\n" http://localhost:8080/ >> performance.txt
     - cat performance.txt
     - echo "PERFORMANCE TEST DONE"
   artifacts:
