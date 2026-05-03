@@ -18,7 +18,6 @@ variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
 
-# ==================== STAGE 1: BUILD ====================
 build_job:
   stage: build
   image: php:8.2-cli-alpine
@@ -27,7 +26,6 @@ build_job:
     - find . -name "*.php" -type f -exec php -l {} \;
     - echo "Build successful"
 
-# ==================== STAGE 2: TEST ====================
 test_job:
   stage: test
   image: php:8.2-cli-alpine
@@ -103,7 +101,6 @@ test_job:
       '
     - echo "E2E TESTS COMPLETED"
 
-# ==================== STAGE 3: QUALITY ====================
 quality_job:
   stage: quality
   image: php:8.2-cli-alpine
@@ -114,7 +111,6 @@ quality_job:
     - grep -r "prepare" app/ || echo "Missing prepare"
     - echo "Quality check passed"
 
-# ==================== STAGE 4: PACKAGE ====================
 package_job:
   stage: package
   image: alpine:latest
@@ -128,7 +124,6 @@ package_job:
     paths:
       - employee-task-management.zip
 
-# ==================== STAGE 5: DEPLOY STAGING ====================
 deploy_job:
   stage: deploy
   image: docker:latest
@@ -150,7 +145,6 @@ deploy_job:
     name: staging
     url: http://localhost:8080
 
-# ==================== STAGE 6: PERFORMANCE ====================
 performance_job:
   stage: performance
   image: alpine:latest
@@ -168,7 +162,6 @@ performance_job:
       - performance.txt
   allow_failure: true
 
-# ==================== STAGE 7: SECURITY ====================
 security_job:
   stage: security
   image: alpine:latest
@@ -180,7 +173,6 @@ security_job:
     - grep -r "password.*=.*['\"]" . --include="*.php" | grep -v "password_hash" && echo "Hardcoded passwords?" || echo "OK"
   allow_failure: true
 
-# ==================== STAGE 8: CANARY ====================
 canary_job:
   stage: canary
   image: docker:latest
@@ -199,7 +191,6 @@ canary_job:
     url: http://localhost:8081
   when: manual
 
-# ==================== STAGE 9: DEPLOY PRODUCTION ====================
 deploy_prod_job:
   stage: deploy_prod
   image: docker:latest
