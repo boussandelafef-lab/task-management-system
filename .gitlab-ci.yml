@@ -127,7 +127,6 @@ package_job:
       - employee-task-management.zip
 
 # ===== NOUVEAUX JOBS (ajout seulement) =====
-
 deploy_staging_job:
   stage: deploy_staging
   image: docker:latest
@@ -138,8 +137,10 @@ deploy_staging_job:
   script:
     - echo "🚀 Déploiement STAGING"
     - docker-compose up -d --build
-    - sleep 15
-    - curl -f http://localhost || exit 1
+    - sleep 20
+    - docker-compose ps
+    - docker-compose logs
+    - curl -f http://web:80 || exit 1
     - echo "✅ Application OK"
   environment:
     name: staging
