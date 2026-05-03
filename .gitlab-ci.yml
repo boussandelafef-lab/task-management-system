@@ -17,12 +17,9 @@ cache:
 variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
-  # Configuration pour Docker-in-Docker
   DOCKER_HOST: tcp://docker:2375
   DOCKER_TLS_CERTDIR: ""
-  DOCKER_DRIVER: overlay2
 
-# ========== ÉTAPE 1 : BUILD ==========
 build_job:
   stage: build
   image: php:8.2-cli-alpine
@@ -31,7 +28,6 @@ build_job:
     - find . -name "*.php" -type f -exec php -l {} \;
     - echo "Build successful"
 
-# ========== ÉTAPE 2 : TEST ==========
 test_job:
   stage: test
   image: php:8.2-cli-alpine
@@ -49,19 +45,74 @@ test_job:
       $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
       echo "DB Connected\n";
       '
+    - |
+      php -r '
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(50) NOT NULL, username VARCHAR(50) NOT NULL, password VARCHAR(255) NOT NULL, role ENUM(\"admin\",\"employee\") NOT NULL)");
+      echo "Users table OK\n";
+      '
+    - |
+      php -r '
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100) NOT NULL, description TEXT, assigned_to INT, due_date DATE, status ENUM(\"pending\",\"in_progress\",\"completed\") DEFAULT \"pending\")");
+      echo "Tasks table OK\n";
+      '
+    - |
+      php -r '
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("CREATE TABLE IF NOT EXISTS notifications (id INT AUTO_INCREMENT PRIMARY KEY, message TEXT NOT NULL, recipient INT NOT NULL, type VARCHAR(50) NOT NULL, date DATETIME DEFAULT CURRENT_TIMESTAMP, is_read BOOLEAN DEFAULT FALSE)");
+      echo "Notifications table OK\n";
+      '
+    - |
+      php -r '
+      $hash = password_hash("123", PASSWORD_DEFAULT);
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Administrator\", \"admin\", \"$hash\", \"admin\")");
+      echo "Admin created\n";
+      '
+    - |
+      php -r '
+      $hash = password_hash("employee123", PASSWORD_DEFAULT);
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Sarah Johnson\", \"sarah\", \"$hash\", \"employee\")");
+      echo "Employee created\n";
+      '
+    - |
+      php -r '
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\"");
+      $sarah_id = $stmt->fetch()["id"];
+      $conn->exec("INSERT INTO tasks (title, description, assigned_to, due_date, status) VALUES (\"Complete monthly report\", \"Prepare financial report\", $sarah_id, \"" . date("Y-m-d", strtotime("+7 days")) . "\", \"pending\")");
+      echo "Task 1 created\n";
+      '
+    - |
+      php -r '
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\"");
+      $sarah_id = $stmt->fetch()["id"];
+      $conn->exec("INSERT INTO tasks (title, description, assigned_to, due_date, status) VALUES (\"Review client feedback\", \"Summarize feedback\", $sarah_id, \"" . date("Y-m-d") . "\", \"pending\")");
+      echo "Task 2 created\n";
+      '
+    - |
+      php -r '
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $count = $conn->query("SELECT COUNT(*) FROM users")->fetchColumn();
+      echo "Total users: $count\n";
+      $count = $conn->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
+      echo "Total tasks: $count\n";
+      '
     - echo "E2E TESTS COMPLETED"
 
-# ========== ÉTAPE 3 : QUALITÉ ==========
 quality_job:
   stage: quality
   image: php:8.2-cli-alpine
   allow_failure: true
   script:
     - echo "Quality check"
-    - grep -r "password_hash" . || echo "Missing password_hash"
+    - grep -r "password_hash" app/ || echo "Missing password_hash"
+    - grep -r "prepare" app/ || echo "Missing prepare"
     - echo "Quality check passed"
 
-# ========== ÉTAPE 4 : PACKAGE ==========
 package_job:
   stage: package
   image: alpine:latest
@@ -69,99 +120,69 @@ package_job:
     - apk add --no-cache zip
   script:
     - echo "Creating package"
-    - zip -r employee-task-management.zip *.php app/ inc/ css/ 2>/dev/null || true
+    - zip -r employee-task-management.zip *.php app/ inc/ css/ assets/ 2>/dev/null || true
     - echo "Package created"
   artifacts:
     paths:
       - employee-task-management.zip
 
-# ========== ÉTAPE 5 : DÉPLOIEMENT STAGING ==========
+# ===== NOUVEAUX JOBS (ajout seulement) =====
+
 deploy_staging_job:
   stage: deploy_staging
   image: docker:latest
   services:
     - docker:dind
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
   before_script:
     - apk add --no-cache docker-compose curl
   script:
-    - echo "🚀 Déploiement sur staging"
+    - echo "🚀 Déploiement STAGING"
     - docker-compose up -d --build
-    - sleep 10
-    - echo "✅ Déploiement staging terminé"
+    - sleep 15
+    - curl -f http://localhost || exit 1
+    - echo "✅ Application OK"
   environment:
     name: staging
-  only:
-    - main
 
-# ========== ÉTAPE 6 : SCAN DE SÉCURITÉ ==========
-security_job:
-  stage: security
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache grep findutils
-  script:
-    - echo "🔒 Scan de sécurité"
-    - |
-      if grep -rn "SELECT.*\$_GET" *.php 2>/dev/null; then
-        echo "⚠️ Injection SQL potentielle"
-      else
-        echo "✅ Pas d'injection SQL évidente"
-      fi
-    - |
-      if grep -q "password_hash" *.php 2>/dev/null; then
-        echo "✅ password_hash utilisé"
-      else
-        echo "⚠️ password_hash non trouvé"
-      fi
-  allow_failure: true
-
-# ========== ÉTAPE 7 : TESTS DE PERFORMANCE ==========
 performance_job:
   stage: performance
-  image: alpine:latest
+  image: alpine
   script:
     - apk add --no-cache curl apache2-utils
-    - echo "📊 Tests de performance"
-    - echo "Tests terminés" > performance_results.txt
+    - echo "📊 Test performance"
+    - ab -n 50 -c 5 http://localhost/ > performance.txt || true
   artifacts:
     paths:
-      - performance_results.txt
+      - performance.txt
   allow_failure: true
 
-# ========== ÉTAPE 8 : CANARY ==========
+security_job:
+  stage: security
+  image: alpine
+  before_script:
+    - apk add --no-cache grep
+  script:
+    - echo "🔒 Scan sécurité"
+    - grep -r "SELECT.*\$_GET" . && echo "⚠️ Risque injection SQL" || echo "✅ OK"
+  allow_failure: true
+
 canary_job:
   stage: canary
   image: docker:latest
   services:
     - docker:dind
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-  before_script:
-    - apk add --no-cache docker-compose
   script:
-    - echo "🐦 DÉPLOIEMENT CANARY"
+    - echo "🐦 Canary deployment"
     - docker-compose -p canary up -d
-    - echo "✅ Canary déployé"
   when: manual
 
-# ========== ÉTAPE 9 : PRODUCTION ==========
 deploy_prod_job:
   stage: deploy_prod
   image: docker:latest
   services:
     - docker:dind
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-  before_script:
-    - apk add --no-cache docker-compose
   script:
-    - echo "🏭 DÉPLOIEMENT PRODUCTION"
+    - echo "🏭 Déploiement production"
     - docker-compose down
     - docker-compose up -d --build
-    - echo "✅ Production déployée"
   when: manual
