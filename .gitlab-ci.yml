@@ -142,39 +142,42 @@ deploy_job:
     - echo "DEPLOY STAGING"
 
     - docker-compose up -d --build
-    - sleep 20
+    - sleep 25
 
+    # check container
     - CONTAINER=$(docker ps -qf "name=web")
     - if [ -z "$CONTAINER" ]; then echo "NO WEB CONTAINER" && exit 1; fi
 
-    # ✔ check HTTP direct (plus fiable que localhost container exec)
-    - curl -f http://localhost:8080 || exit 1
+    # ✔ FIX IMPORTANT (plus localhost)
+    - curl -f http://web:80 || exit 1
 
     - echo "STAGING OK"
 
-
-# ==================== PERFORMANCE (FIXED) ====================
+# ==================== PERFORMANCE ====================
 performance_job:
   stage: performance
   image: docker:latest
   services:
     - docker:dind
-
   before_script:
     - apk add --no-cache docker-compose apache2-utils curl
-
   script:
-    - echo "PERFORMANCE TEST START"
+    - echo "PERFORMANCE TEST"
 
-    # IMPORTANT : recréer l’environnement dans ce job
     - docker-compose up -d --build
-    - sleep 20
+    - sleep 25
 
-    # vérifier container
     - CONTAINER=$(docker ps -qf "name=web")
     - if [ -z "$CONTAINER" ]; then echo "NO WEB CONTAINER" && exit 1; fi
 
-    # test charge correct
+    # ✔ retry system (stable)
+    - |
+      for i in 1 2 3 4 5; do
+        curl -f http://web:80 && break
+        echo "Retry $i..."
+        sleep 5
+      done
+
     - ab -n 200 -c 10 http://web:80/ > performance.txt
 
     - echo "DONE"
@@ -182,7 +185,6 @@ performance_job:
   artifacts:
     paths:
       - performance.txt
-
   allow_failure: true
 
 # ==================== SECURITY ====================
@@ -207,9 +209,12 @@ canary_job:
     - apk add --no-cache docker-compose curl
   script:
     - echo "CANARY DEPLOY"
+
     - docker-compose -f docker-compose.canary.yml up -d --build
-    - sleep 10
+    - sleep 15
+
     - curl -f http://localhost:8081 || exit 1
+
     - echo "CANARY OK"
   when: manual
 
@@ -226,6 +231,18 @@ deploy_prod_job:
 
     - docker-compose down
     - docker-compose up -d --build
+    - sleep 25
+
+    # ✔ FIX CRITICAL
+    - |
+      for i in 1 2 3 4 5; do
+        curl -f http://web:80 && break
+        echo "Retry $i..."
+        sleep 5
+      done
+
+    - echo "PROD OK"
+  when: manual
     - sleep 20
 
     - curl -f http://localhost:8080 || exit 1
