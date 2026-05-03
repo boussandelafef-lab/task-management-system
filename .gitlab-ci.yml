@@ -140,14 +140,18 @@ deploy_job:
     - apk add --no-cache docker-compose curl
   script:
     - echo "DEPLOY STAGING"
+
     - docker-compose up -d --build
     - sleep 20
 
     - CONTAINER=$(docker ps -qf "name=web")
     - if [ -z "$CONTAINER" ]; then echo "NO WEB CONTAINER" && exit 1; fi
 
+    # ✔ check HTTP direct (plus fiable que localhost container exec)
     - curl -f http://localhost:8080 || exit 1
+
     - echo "STAGING OK"
+
 
 # ==================== PERFORMANCE (FIXED) ====================
 performance_job:
