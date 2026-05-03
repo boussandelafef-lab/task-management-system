@@ -1,18 +1,18 @@
-version: '3.8'
-
 services:
   web:
     build: .
     ports:
       - "8080:80"
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root_password
+      DB_NAME: task_management_test
     depends_on:
       - db
 
   db:
     image: mysql:8.0
-    restart: always
     environment:
       MYSQL_ROOT_PASSWORD: root_password
       MYSQL_DATABASE: task_management_test
-    ports:
-      - "3306:3306"
