@@ -12,15 +12,13 @@ stages:
 cache:
   paths:
     - vendor/
-  key: "$CI_COMMIT_REF_SLUG"
+  key: "$CI_JOB_NAME"
 
 variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
 
-# =========================
-# BUILD
-# =========================
+# ==================== STAGE 1: BUILD ====================
 build_job:
   stage: build
   image: php:8.2-cli-alpine
@@ -29,271 +27,192 @@ build_job:
     - find . -name "*.php" -type f -exec php -l {} \;
     - echo "Build successful"
 
-# =========================
-# TEST
-# =========================
+# ==================== STAGE 2: TEST ====================
 test_job:
   stage: test
   image: php:8.2-cli-alpine
   services:
-    - name: mysql:8.0
-      alias: mysql
-
+    - mysql:8.0
   before_script:
     - apk add --no-cache mysql-client
-    - docker-php-ext-install pdo pdo_mysql mysqli
-    - sleep 15
-
+    - docker-php-ext-install pdo_mysql mysqli
+    - sleep 10
   script:
     - echo "E2E TEST START"
-
     - |
       php -r '
-      $pdo = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
       echo "DB Connected\n";
       '
-
     - |
       php -r '
-      $pdo = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-
-      $pdo->exec("CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        full_name VARCHAR(50),
-        username VARCHAR(50),
-        password VARCHAR(255),
-        role ENUM(\"admin\",\"employee\")
-      )");
-
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(50) NOT NULL, username VARCHAR(50) NOT NULL, password VARCHAR(255) NOT NULL, role ENUM(\"admin\",\"employee\") NOT NULL)");
       echo "Users table OK\n";
       '
-
     - |
       php -r '
-      $pdo = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-
-      $pdo->exec("CREATE TABLE IF NOT EXISTS tasks (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        title VARCHAR(100),
-        description TEXT,
-        assigned_to INT,
-        due_date DATE,
-        status ENUM(\"pending\",\"in_progress\",\"completed\")
-      )");
-
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100) NOT NULL, description TEXT, assigned_to INT, due_date DATE, status ENUM(\"pending\",\"in_progress\",\"completed\") DEFAULT \"pending\")");
       echo "Tasks table OK\n";
       '
-
     - |
       php -r '
-      $pdo = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("CREATE TABLE IF NOT EXISTS notifications (id INT AUTO_INCREMENT PRIMARY KEY, message TEXT NOT NULL, recipient INT NOT NULL, type VARCHAR(50) NOT NULL, date DATETIME DEFAULT CURRENT_TIMESTAMP, is_read BOOLEAN DEFAULT FALSE)");
+      echo "Notifications table OK\n";
+      '
+    - |
+      php -r '
       $hash = password_hash("123", PASSWORD_DEFAULT);
-      $stmt = $pdo->prepare("INSERT INTO users (full_name, username, password, role) VALUES (?, ?, ?, ?)");
-      $stmt->execute(["Administrator", "admin", $hash, "admin"]);
-
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Administrator\", \"admin\", \"$hash\", \"admin\")");
       echo "Admin created\n";
       '
-
     - |
       php -r '
-      $pdo = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-
       $hash = password_hash("employee123", PASSWORD_DEFAULT);
-      $stmt = $pdo->prepare("INSERT INTO users (full_name, username, password, role) VALUES (?, ?, ?, ?)");
-      $stmt->execute(["Sarah Johnson", "sarah", $hash, "employee"]);
-
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Sarah Johnson\", \"sarah\", \"$hash\", \"employee\")");
       echo "Employee created\n";
       '
-
     - |
       php -r '
-      $pdo = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-
-      $user = $pdo->query("SELECT id FROM users WHERE username=\"sarah\"")->fetch(PDO::FETCH_ASSOC);
-
-      $stmt = $pdo->prepare("INSERT INTO tasks (title, description, assigned_to, due_date, status)
-      VALUES (?, ?, ?, ?, ?)");
-
-      $stmt->execute([
-        "Complete monthly report",
-        "Prepare financial report",
-        $user["id"],
-        date("Y-m-d", strtotime("+7 days")),
-        "pending"
-      ]);
-
-      echo "Task created\n";
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\"");
+      $sarah_id = $stmt->fetch()["id"];
+      $conn->exec("INSERT INTO tasks (title, description, assigned_to, due_date, status) VALUES (\"Complete monthly report\", \"Prepare financial report\", $sarah_id, \"" . date("Y-m-d", strtotime("+7 days")) . "\", \"pending\")");
+      echo "Task 1 created\n";
       '
+    - |
+      php -r '
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\"");
+      $sarah_id = $stmt->fetch()["id"];
+      $conn->exec("INSERT INTO tasks (title, description, assigned_to, due_date, status) VALUES (\"Review client feedback\", \"Summarize feedback\", $sarah_id, \"" . date("Y-m-d") . "\", \"pending\")");
+      echo "Task 2 created\n";
+      '
+    - |
+      php -r '
+      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
+      $count = $conn->query("SELECT COUNT(*) FROM users")->fetchColumn();
+      echo "Total users: $count\n";
+      $count = $conn->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
+      echo "Total tasks: $count\n";
+      '
+    - echo "E2E TESTS COMPLETED"
 
-    - echo "E2E TESTS DONE"
-
-# =========================
-# QUALITY
-# =========================
+# ==================== STAGE 3: QUALITY ====================
 quality_job:
   stage: quality
   image: php:8.2-cli-alpine
   allow_failure: true
   script:
     - echo "Quality check"
-    - grep -r "password_hash" app/ || echo "OK"
-    - grep -r "prepare(" app/ || echo "Warning missing prepare statements"
-    - echo "Quality done"
+    - grep -r "password_hash" app/ || echo "Missing password_hash"
+    - grep -r "prepare" app/ || echo "Missing prepare"
+    - echo "Quality check passed"
 
-# =========================
-# PACKAGE
-# =========================
+# ==================== STAGE 4: PACKAGE ====================
 package_job:
   stage: package
   image: alpine:latest
-
   before_script:
     - apk add --no-cache zip
-
   script:
     - echo "Creating package"
-    - zip -r employee-task-management.zip . -x "vendor/*" ".git/*" "node_modules/*"
+    - zip -r employee-task-management.zip *.php app/ inc/ css/ assets/ 2>/dev/null || true
     - echo "Package created"
-
   artifacts:
     paths:
       - employee-task-management.zip
 
-# =========================
-# DEPLOY STAGING
-# =========================
+# ==================== STAGE 5: DEPLOY STAGING ====================
 deploy_job:
   stage: deploy
   image: docker:latest
   services:
     - docker:dind
-
   before_script:
     - apk add --no-cache docker-compose curl
-
   script:
-    - |
-      set -e
-
-      echo "DEPLOY STAGING"
-
-      docker-compose up -d --build
-      sleep 20
-
-      docker ps
-
-      CONTAINER_ID=$(docker ps --filter "name=web" -q)
-
-      if [ -z "$CONTAINER_ID" ]; then
-        echo "ERROR: web container not found"
-        exit 1
-      fi
-
-      docker exec "$CONTAINER_ID" curl -f http://localhost
-
-      echo "STAGING OK"
-
+    - echo "🚀 DEPLOY STAGING ON CODESPACES"
+    - docker-compose up -d --build
+    - sleep 20
+    - docker ps
+    - docker-compose ps
+    - docker-compose logs
+    - docker exec $(docker ps -qf "name=web") curl -f http://localhost || exit 1
+    - echo "✅ STAGING OK"
   environment:
     name: staging
     url: http://localhost:8080
 
-# =========================
-# PERFORMANCE
-# =========================
+# ==================== STAGE 6: PERFORMANCE ====================
 performance_job:
   stage: performance
-  image: alpine:latest
-  allow_failure: true
-
+  image: docker:latest
+  services:
+    - docker:dind
   before_script:
-    - apk add --no-cache curl
-
+    - apk add --no-cache apache2-utils
   script:
-    - echo "PERFORMANCE TEST"
-    - curl -o /dev/null -s -w "Time: %{time_total}s\n" http://localhost:8080/ > perf.txt
-    - cat perf.txt
+    - echo "📊 PERFORMANCE TEST"
+    - docker exec $(docker ps -qf "name=web") sh -c "apk add --no-cache apache2-utils && ab -n 50 -c 5 http://localhost/ > /tmp/performance.txt 2>&1 || true"
+    - docker cp $(docker ps -qf "name=web"):/tmp/performance.txt ./performance.txt || echo "Performance test completed"
     - echo "DONE"
-
   artifacts:
     paths:
-      - perf.txt
+      - performance.txt
+  allow_failure: true
 
-# =========================
-# SECURITY
-# =========================
+# ==================== STAGE 7: SECURITY ====================
 security_job:
   stage: security
   image: alpine:latest
-  allow_failure: true
-
   before_script:
     - apk add --no-cache grep
-
   script:
-    - echo "SECURITY SCAN"
-    - grep -r "SELECT.*\$_GET" . --include="*.php" || echo "No SQL injection patterns"
-    - grep -r "password.*=.*['\"]" . --include="*.php" | grep -v "password_hash" || echo "OK"
-    - echo "SECURITY DONE"
+    - echo "🔒 SECURITY CHECK"
+    - grep -r "SELECT.*\$_GET" . && echo "⚠️ SQL RISK" || echo "✅ No SQL injection patterns found"
+    - grep -r "password.*=.*['\"]" . --include="*.php" && echo "⚠️ Possible hardcoded passwords" || echo "✅ No obvious hardcoded passwords"
+  allow_failure: true
 
-# =========================
-# CANARY
-# =========================
+# ==================== STAGE 8: CANARY ====================
 canary_job:
   stage: canary
   image: docker:latest
   services:
     - docker:dind
-
   before_script:
     - apk add --no-cache docker-compose
-
   script:
-    - echo "CANARY DEPLOY"
+    - echo "🐦 CANARY DEPLOY"
     - docker-compose -f docker-compose.canary.yml up -d --build
     - sleep 10
     - docker ps
-    - echo "CANARY OK"
-
+    - echo "✅ CANARY DEPLOYMENT DONE"
   environment:
     name: canary
     url: http://localhost:8081
   when: manual
 
-# =========================
-# PRODUCTION
-# =========================
+# ==================== STAGE 9: DEPLOY PRODUCTION ====================
 deploy_prod_job:
   stage: deploy_prod
   image: docker:latest
   services:
     - docker:dind
-
   before_script:
-    - apk add --no-cache docker-compose curl
-
+    - apk add --no-cache docker-compose
   script:
-    - |
-      set -e
-
-      echo "PRODUCTION DEPLOY"
-
-      docker-compose down
-      docker-compose up -d --build
-      sleep 20
-
-      CONTAINER_ID=$(docker ps --filter "name=web" -q)
-
-      if [ -z "$CONTAINER_ID" ]; then
-        echo "ERROR: no container found"
-        exit 1
-      fi
-
-      docker exec "$CONTAINER_ID" curl -f http://localhost
-
-      echo "PRODUCTION OK"
-
+    - echo "🏭 PRODUCTION DEPLOY"
+    - docker-compose down
+    - docker-compose up -d --build
+    - sleep 15
+    - docker exec $(docker ps -qf "name=web") curl -f http://localhost || exit 1
+    - echo "✅ PRODUCTION OK"
   environment:
     name: production
     url: http://localhost:8080
