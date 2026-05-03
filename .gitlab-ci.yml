@@ -18,7 +18,6 @@ variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
 
-# ==================== STAGE 1: BUILD ====================
 build_job:
   stage: build
   image: php:8.2-cli-alpine
@@ -27,7 +26,6 @@ build_job:
     - find . -name "*.php" -type f -exec php -l {} \;
     - echo "Build successful"
 
-# ==================== STAGE 2: TEST ====================
 test_job:
   stage: test
   image: php:8.2-cli-alpine
@@ -103,7 +101,6 @@ test_job:
       '
     - echo "E2E TESTS COMPLETED"
 
-# ==================== STAGE 3: QUALITY ====================
 quality_job:
   stage: quality
   image: php:8.2-cli-alpine
@@ -114,7 +111,6 @@ quality_job:
     - grep -r "prepare" app/ || echo "Missing prepare"
     - echo "Quality check passed"
 
-# ==================== STAGE 4: PACKAGE ====================
 package_job:
   stage: package
   image: alpine:latest
@@ -128,7 +124,6 @@ package_job:
     paths:
       - employee-task-management.zip
 
-# ==================== STAGE 5: DEPLOY STAGING ====================
 deploy_job:
   stage: deploy
   image: docker:latest
@@ -137,49 +132,49 @@ deploy_job:
   before_script:
     - apk add --no-cache docker-compose curl
   script:
-    - echo "🚀 DEPLOY STAGING ON CODESPACES"
+    - echo "DEPLOY STAGING ON CODESPACES"
     - docker-compose up -d --build
-    - sleep 20
-    - docker ps
+    - echo "Waiting for containers..."
+    - sleep 30
+    - echo "Docker ps output:"
+    - docker ps -a
+    - echo "Docker compose ps:"
     - docker-compose ps
-    - docker-compose logs
-    - docker exec $(docker ps -qf "name=web") curl -f http://localhost || exit 1
-    - echo "✅ STAGING OK"
+    - echo "Testing with docker-compose exec:"
+    - docker-compose exec web curl -f http://localhost || exit 1
+    - echo "STAGING OK"
   environment:
     name: staging
     url: http://localhost:8080
 
-# ==================== STAGE 6: PERFORMANCE ====================
 performance_job:
   stage: performance
-  image: docker:latest
-  services:
-    - docker:dind
+  image: alpine:latest
   before_script:
-    - apk add --no-cache apache2-utils
+    - apk add --no-cache curl
   script:
-    - echo "📊 PERFORMANCE TEST"
-    - docker exec $(docker ps -qf "name=web") sh -c "apk add --no-cache apache2-utils && ab -n 50 -c 5 http://localhost/ > /tmp/performance.txt 2>&1 || true"
-    - docker cp $(docker ps -qf "name=web"):/tmp/performance.txt ./performance.txt || echo "Performance test completed"
-    - echo "DONE"
+    - echo "PERFORMANCE TEST"
+    - sleep 5
+    - curl -s -o /dev/null -w "Response time: %{time_total}s\n" http://localhost:8080/ > performance.txt
+    - curl -s -o /dev/null -w "Second request: %{time_total}s\n" http://localhost:8080/ >> performance.txt
+    - cat performance.txt
+    - echo "PERFORMANCE TEST DONE"
   artifacts:
     paths:
       - performance.txt
   allow_failure: true
 
-# ==================== STAGE 7: SECURITY ====================
 security_job:
   stage: security
   image: alpine:latest
   before_script:
     - apk add --no-cache grep
   script:
-    - echo "🔒 SECURITY CHECK"
-    - grep -r "SELECT.*\$_GET" . && echo "⚠️ SQL RISK" || echo "✅ No SQL injection patterns found"
-    - grep -r "password.*=.*['\"]" . --include="*.php" && echo "⚠️ Possible hardcoded passwords" || echo "✅ No obvious hardcoded passwords"
+    - echo "SECURITY CHECK"
+    - grep -r "SELECT.*\$_GET" . && echo "SQL RISK" || echo "No SQL injection patterns found"
+    - grep -r "password.*=.*['\"]" . --include="*.php" && echo "Possible hardcoded passwords" || echo "No obvious hardcoded passwords"
   allow_failure: true
 
-# ==================== STAGE 8: CANARY ====================
 canary_job:
   stage: canary
   image: docker:latest
@@ -188,17 +183,16 @@ canary_job:
   before_script:
     - apk add --no-cache docker-compose
   script:
-    - echo "🐦 CANARY DEPLOY"
+    - echo "CANARY DEPLOY"
     - docker-compose -f docker-compose.canary.yml up -d --build
     - sleep 10
     - docker ps
-    - echo "✅ CANARY DEPLOYMENT DONE"
+    - echo "CANARY DEPLOYMENT DONE"
   environment:
     name: canary
     url: http://localhost:8081
   when: manual
 
-# ==================== STAGE 9: DEPLOY PRODUCTION ====================
 deploy_prod_job:
   stage: deploy_prod
   image: docker:latest
@@ -207,12 +201,12 @@ deploy_prod_job:
   before_script:
     - apk add --no-cache docker-compose
   script:
-    - echo "🏭 PRODUCTION DEPLOY"
+    - echo "PRODUCTION DEPLOY"
     - docker-compose down
     - docker-compose up -d --build
     - sleep 15
-    - docker exec $(docker ps -qf "name=web") curl -f http://localhost || exit 1
-    - echo "✅ PRODUCTION OK"
+    - docker-compose exec web curl -f http://localhost || exit 1
+    - echo "PRODUCTION OK"
   environment:
     name: production
     url: http://localhost:8080
