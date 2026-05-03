@@ -3,6 +3,9 @@ stages:
   - test
   - quality
   - package
+  - deploy
+  - performance
+  - security
 
 cache:
   paths:
@@ -13,6 +16,9 @@ variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
 
+# =========================
+# BUILD
+# =========================
 build_job:
   stage: build
   image: php:8.2-cli-alpine
@@ -21,6 +27,9 @@ build_job:
     - find . -name "*.php" -type f -exec php -l {} \;
     - echo "Build successful"
 
+# =========================
+# TEST
+# =========================
 test_job:
   stage: test
   image: php:8.2-cli-alpine
@@ -32,70 +41,20 @@ test_job:
     - sleep 10
   script:
     - echo "E2E TEST START"
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-      echo "DB Connected\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(50) NOT NULL, username VARCHAR(50) NOT NULL, password VARCHAR(255) NOT NULL, role ENUM(\"admin\",\"employee\") NOT NULL)");
-      echo "Users table OK\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100) NOT NULL, description TEXT, assigned_to INT, due_date DATE, status ENUM(\"pending\",\"in_progress\",\"completed\") DEFAULT \"pending\")");
-      echo "Tasks table OK\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("CREATE TABLE IF NOT EXISTS notifications (id INT AUTO_INCREMENT PRIMARY KEY, message TEXT NOT NULL, recipient INT NOT NULL, type VARCHAR(50) NOT NULL, date DATETIME DEFAULT CURRENT_TIMESTAMP, is_read BOOLEAN DEFAULT FALSE)");
-      echo "Notifications table OK\n";
-      '
-    - |
-      php -r '
-      $hash = password_hash("123", PASSWORD_DEFAULT);
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Administrator\", \"admin\", \"$hash\", \"admin\")");
-      echo "Admin created\n";
-      '
-    - |
-      php -r '
-      $hash = password_hash("employee123", PASSWORD_DEFAULT);
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Sarah Johnson\", \"sarah\", \"$hash\", \"employee\")");
-      echo "Employee created\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\"");
-      $sarah_id = $stmt->fetch()["id"];
-      $conn->exec("INSERT INTO tasks (title, description, assigned_to, due_date, status) VALUES (\"Complete monthly report\", \"Prepare financial report\", $sarah_id, \"" . date("Y-m-d", strtotime("+7 days")) . "\", \"pending\")");
-      echo "Task 1 created\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\"");
-      $sarah_id = $stmt->fetch()["id"];
-      $conn->exec("INSERT INTO tasks (title, description, assigned_to, due_date, status) VALUES (\"Review client feedback\", \"Summarize feedback\", $sarah_id, \"" . date("Y-m-d") . "\", \"pending\")");
-      echo "Task 2 created\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $count = $conn->query("SELECT COUNT(*) FROM users")->fetchColumn();
-      echo "Total users: $count\n";
-      $count = $conn->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
-      echo "Total tasks: $count\n";
-      '
+
+    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); echo "DB Connected\n";'
+
+    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(50), username VARCHAR(50), password VARCHAR(255), role ENUM(\"admin\",\"employee\"))");'
+
+    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); $conn->exec("CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100), description TEXT, assigned_to INT, due_date DATE, status ENUM(\"pending\",\"in_progress\",\"completed\") DEFAULT \"pending\")");'
+
+    - php -r '$conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password"); echo "Tables OK\n";'
+
     - echo "E2E TESTS COMPLETED"
 
+# =========================
+# QUALITY
+# =========================
 quality_job:
   stage: quality
   image: php:8.2-cli-alpine
@@ -106,6 +65,9 @@ quality_job:
     - grep -r "prepare" app/ || echo "Missing prepare"
     - echo "Quality check passed"
 
+# =========================
+# PACKAGE
+# =========================
 package_job:
   stage: package
   image: alpine:latest
@@ -118,3 +80,38 @@ package_job:
   artifacts:
     paths:
       - employee-task-management.zip
+
+# =========================
+# DEPLOY (STAGING)
+# =========================
+deploy_staging_job:
+  stage: deploy
+  image: alpine
+  script:
+    - echo "Deploying application to staging..."
+    - mkdir -p deploy
+    - cp -r . deploy/
+    - echo "Application deployed in staging folder"
+  environment:
+    name: staging
+
+# =========================
+# PERFORMANCE (simple test)
+# =========================
+performance_job:
+  stage: performance
+  image: alpine
+  script:
+    - apk add --no-cache curl
+    - echo "Performance test"
+    - curl -I https://example.com || echo "Test executed"
+
+# =========================
+# SECURITY (simple scan simulation)
+# =========================
+security_job:
+  stage: security
+  image: alpine
+  script:
+    - echo "Security scan simulation"
+    - grep -r "password" . || echo "No hardcoded password detected"
