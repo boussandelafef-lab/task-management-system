@@ -41,8 +41,7 @@ deploy_staging_job:
   environment:
     name: staging
     url: ${URL}
-  only:
-    - main
+
 
 # ========== TESTS DE PERFORMANCE ==========
 performance_job:
@@ -88,8 +87,6 @@ canary_job:
     name: canary
     url: ${CANARY_URL}
   when: manual
-  only:
-    - main
 
 # ========== DÉPLOIEMENT PRODUCTION ==========
 deploy_prod_job:
@@ -110,5 +107,4 @@ deploy_prod_job:
     name: production
     url: ${PROD_URL}
   when: manual
-  only:
-    - main
+  
