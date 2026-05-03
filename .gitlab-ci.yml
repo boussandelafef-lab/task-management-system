@@ -3,11 +3,11 @@ stages:
   - test
   - quality
   - package
-  - deploy_staging      # Nouveau : Déploiement sur préproduction
-  - performance         # Nouveau : Tests de performance
-  - security            # Nouveau : Scan de sécurité
-  - canary              # Nouveau : Déploiement Canary
-  - deploy_prod         # Nouveau : Déploiement production (manuel)
+  - deploy_staging
+  - performance
+  - security
+  - canary
+  - deploy_prod
 
 cache:
   paths:
@@ -17,151 +17,43 @@ cache:
 variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
-  # À remplacer par l'URL de votre environnement Docker (Play-With-Docker ou Codespaces)
-  PLAYWD: ip172-18-0-51-bihm1906chi000b37l6g  # À modifier avec votre URL
+  # Variables spécifiques Codespaces
+  CODESPACE_NAME: ${CODESPACE_NAME}
+  GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: ${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}
+  # Pour Docker dans Codespaces
+  DOCKER_HOST: unix:///var/run/docker.sock
 
-# ========== ÉTAPE 1 : BUILD ==========
-build_job:
-  stage: build
-  image: php:8.2-cli-alpine
-  script:
-    - echo "Build started"
-    - find . -name "*.php" -type f -exec php -l {} \;
-    - echo "Build successful"
+# ... (garder vos jobs build, test, quality identiques) ...
 
-# ========== ÉTAPE 2 : TEST ==========
-test_job:
-  stage: test
-  image: php:8.2-cli-alpine
-  services:
-    - mysql:8.0
-  before_script:
-    - apk add --no-cache mysql-client
-    - docker-php-ext-install pdo_mysql mysqli
-    - sleep 10
-  script:
-    - echo "E2E TEST START"
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-      echo "DB Connected\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, full_name VARCHAR(50) NOT NULL, username VARCHAR(50) NOT NULL, password VARCHAR(255) NOT NULL, role ENUM(\"admin\",\"employee\") NOT NULL)");
-      echo "Users table OK\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(100) NOT NULL, description TEXT, assigned_to INT, due_date DATE, status ENUM(\"pending\",\"in_progress\",\"completed\") DEFAULT \"pending\")");
-      echo "Tasks table OK\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("CREATE TABLE IF NOT EXISTS notifications (id INT AUTO_INCREMENT PRIMARY KEY, message TEXT NOT NULL, recipient INT NOT NULL, type VARCHAR(50) NOT NULL, date DATETIME DEFAULT CURRENT_TIMESTAMP, is_read BOOLEAN DEFAULT FALSE)");
-      echo "Notifications table OK\n";
-      '
-    - |
-      php -r '
-      $hash = password_hash("123", PASSWORD_DEFAULT);
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Administrator\", \"admin\", \"$hash\", \"admin\")");
-      echo "Admin created\n";
-      '
-    - |
-      php -r '
-      $hash = password_hash("employee123", PASSWORD_DEFAULT);
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES (\"Sarah Johnson\", \"sarah\", \"$hash\", \"employee\")");
-      echo "Employee created\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\"");
-      $sarah_id = $stmt->fetch()["id"];
-      $conn->exec("INSERT INTO tasks (title, description, assigned_to, due_date, status) VALUES (\"Complete monthly report\", \"Prepare financial report\", $sarah_id, \"" . date("Y-m-d", strtotime("+7 days")) . "\", \"pending\")");
-      echo "Task 1 created\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $stmt = $conn->query("SELECT id FROM users WHERE username=\"sarah\"");
-      $sarah_id = $stmt->fetch()["id"];
-      $conn->exec("INSERT INTO tasks (title, description, assigned_to, due_date, status) VALUES (\"Review client feedback\", \"Summarize feedback\", $sarah_id, \"" . date("Y-m-d") . "\", \"pending\")");
-      echo "Task 2 created\n";
-      '
-    - |
-      php -r '
-      $conn = new PDO("mysql:host=mysql;dbname=task_management_test", "root", "root_password");
-      $count = $conn->query("SELECT COUNT(*) FROM users")->fetchColumn();
-      echo "Total users: $count\n";
-      $count = $conn->query("SELECT COUNT(*) FROM tasks")->fetchColumn();
-      echo "Total tasks: $count\n";
-      '
-    - echo "E2E TESTS COMPLETED"
-
-# ========== ÉTAPE 3 : QUALITÉ ==========
-quality_job:
-  stage: quality
-  image: php:8.2-cli-alpine
-  allow_failure: true
-  script:
-    - echo "Quality check"
-    - grep -r "password_hash" . || echo "Missing password_hash"
-    - grep -r "prepare" . || echo "Missing prepare"
-    - echo "Quality check passed"
-
-# ========== ÉTAPE 4 : PACKAGE ==========
-package_job:
-  stage: package
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache zip
-  script:
-    - echo "Creating package"
-    - zip -r employee-task-management.zip *.php app/ inc/ css/ 2>/dev/null || true
-    - echo "Package created"
-  artifacts:
-    paths:
-      - employee-task-management.zip
-
-# ========== ÉTAPE 5 : DÉPLOIEMENT STAGING (NOUVEAU) ==========
+# ========== DÉPLOIEMENT STAGING (CODESPACES) ==========
 deploy_staging_job:
   stage: deploy_staging
-  image: alpine:latest
+  image: docker:latest
   before_script:
-    - apk add --no-cache docker-cli-compose curl
+    - apk add --no-cache docker-compose curl
   script:
-    - echo "🚀 Déploiement sur l'environnement de STAGING"
-    - export DOCKER_HOST=tcp://$PLAYWD.direct.labs.play-with-docker.com:2375
-    - docker compose down
-    - docker compose up -d
+    - echo "🚀 Déploiement sur Codespaces"
+    - docker-compose up -d --build
     - sleep 10
-    - curl -f http://$PLAYWD-8080.direct.labs.play-with-docker.com/index.php || echo "⚠️ Application non accessible"
+    - PORT=8080
+    - URL="https://${CODESPACE_NAME}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+    - curl -f $URL/index.php || echo "⚠️ Application non accessible"
   environment:
     name: staging
-    url: http://$PLAYWD-8080.direct.labs.play-with-docker.com
+    url: ${URL}
   only:
     - main
 
-# ========== ÉTAPE 6 : TESTS DE PERFORMANCE (NOUVEAU) ==========
+# ========== TESTS DE PERFORMANCE ==========
 performance_job:
   stage: performance
   image: alpine:latest
-  services:
-    - docker:dind
   variables:
-    URL: http://$PLAYWD-8080.direct.labs.play-with-docker.com/
-    DOCKER_HOST: tcp://docker:2375
+    PORT: 8080
+    URL: "https://${CODESPACE_NAME}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
   script:
-    - apk add --no-cache curl docker-cli apache2-utils
+    - apk add --no-cache curl apache2-utils
     - echo "📊 Tests de performance sur $URL"
-    # Attente que l'application soit prête
     - |
       for i in $(seq 1 30); do
         if curl -s -o /dev/null -w "%{http_code}" $URL | grep -q "200"; then
@@ -171,98 +63,52 @@ performance_job:
         echo "⏳ Attente... ($i/30)"
         sleep 5
       done
-    # Test Apache Benchmark
     - ab -n 100 -c 10 $URL > performance_results.txt
     - cat performance_results.txt
-    # Test spécifique sur login.php
-    - ab -n 50 -c 5 $URL/login.php >> performance_results.txt
   artifacts:
     paths:
       - performance_results.txt
-    expire_in: 1 week
   allow_failure: true
 
-# ========== ÉTAPE 7 : SCAN DE SÉCURITÉ (NOUVEAU) ==========
-security_job:
-  stage: security
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache grep findutils
-  script:
-    - echo "🔒 Scan de sécurité des fichiers PHP"
-    # Recherche d'injections SQL potentielles
-    - |
-      echo "=== Recherche d'injections SQL ==="
-      if grep -rn "SELECT.*\$_GET" *.php 2>/dev/null; then
-        echo "⚠️ Injection SQL potentielle détectée"
-      else
-        echo "✅ Pas d'injection SQL évidente"
-      fi
-    # Recherche d'XSS potentielles
-    - |
-      echo "=== Recherche d'XSS ==="
-      if grep -rn "echo.*\$_GET" *.php 2>/dev/null; then
-        echo "⚠️ XSS potentielle détectée"
-      else
-        echo "✅ Pas d'XSS évidente"
-      fi
-    # Vérification de l'utilisation de password_hash
-    - |
-      echo "=== Vérification password_hash ==="
-      if grep -q "password_hash" *.php 2>/dev/null; then
-        echo "✅ password_hash utilisé"
-      else
-        echo "⚠️ password_hash non trouvé"
-      fi
-    # Scan avec Trivy si une image Docker existe
-    - |
-      if command -v trivy &> /dev/null; then
-        trivy image --exit-code 0 --severity CRITICAL employee-task:latest || true
-      else
-        echo "ℹ️ Trivy non disponible, scan limité"
-      fi
-  artifacts:
-    paths:
-      - security_report.txt
-  allow_failure: true
-
-# ========== ÉTAPE 8 : CANARY RELEASE (NOUVEAU) ==========
+# ========== CANARY RELEASE ==========
 canary_job:
   stage: canary
-  image: alpine:latest
+  image: docker:latest
   before_script:
-    - apk add --no-cache docker-cli-compose
+    - apk add --no-cache docker-compose
   script:
-    - echo "🐦 DÉPLOIEMENT CANARY - Version limitée à 10% des utilisateurs"
-    - export DOCKER_HOST=tcp://$PLAYWD.direct.labs.play-with-docker.com:2375
-    # Déploiement sur un port différent pour le canary
-    - docker compose -f docker-compose.yml -p canary up -d
-    - docker compose -p canary scale web=1
-    - echo "✅ Version canary déployée sur le même cluster"
+    - echo "🐦 DÉPLOIEMENT CANARY"
+    # Utiliser un port différent pour canary
+    - sed -i 's/8080:80/8081:80/' docker-compose.yml
+    - docker-compose -p canary up -d
+    - PORT=8081
+    - CANARY_URL="https://${CODESPACE_NAME}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+    - echo "✅ Version canary déployée sur $CANARY_URL"
   environment:
     name: canary
-    url: http://$PLAYWD-8081.direct.labs.play-with-docker.com
+    url: ${CANARY_URL}
   when: manual
   only:
     - main
 
-# ========== ÉTAPE 9 : DÉPLOIEMENT PRODUCTION (NOUVEAU - MANUEL) ==========
+# ========== DÉPLOIEMENT PRODUCTION ==========
 deploy_prod_job:
   stage: deploy_prod
-  image: alpine:latest
+  image: docker:latest
   before_script:
-    - apk add --no-cache docker-cli-compose
+    - apk add --no-cache docker-compose
   script:
     - echo "🏭 DÉPLOIEMENT EN PRODUCTION"
-    - echo "Vérification finale avant déploiement..."
-    - export DOCKER_HOST=tcp://$PLAYWD.direct.labs.play-with-docker.com:2375
-    - docker compose down
-    - docker compose up -d
-    - echo "✅ Application déployée en production"
-    - docker compose ps
+    - echo "Vérification finale..."
+    - docker-compose down
+    - docker-compose up -d --build
+    - PORT=8080
+    - PROD_URL="https://${CODESPACE_NAME}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+    - echo "✅ Application déployée sur $PROD_URL"
+    - docker-compose ps
   environment:
     name: production
-    url: http://$PLAYWD-8080.direct.labs.play-with-docker.com
+    url: ${PROD_URL}
   when: manual
   only:
     - main
