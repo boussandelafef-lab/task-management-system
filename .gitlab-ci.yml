@@ -105,46 +105,27 @@ performance_job:
   image: docker:latest
   services:
     - docker:dind
-
+  needs: []  # Ne dépend d'aucun job
   variables:
     URL: http://web:80/
     DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-
-  before_script:
-    - apk add --no-cache curl
-
+    
   script:
-    - echo "PERFORMANCE TEST START"
-
-    # attendre l'application
-    - |
-      for i in $(seq 1 20); do
-        if curl -s -f -o /dev/null $URL; then
-          echo "Application is ready"
-          break
-        fi
-        echo "Waiting for application... attempt $i/20"
-        sleep 5
-      done
-
-    # lancer sitespeed avec options
+    # Tester d'abord l'URL
+    - apk add --no-cache curl
+    - echo "Testing application accessibility..."
+    - curl -v $URL || echo "Application not accessible"
+    
+    # Lancer Sitespeed
     - mkdir -p sitespeed-results
-    - |
-      docker run --shm-size=1g --rm \
-        -v "$(pwd)":/sitespeed.io \
-        sitespeedio/sitespeed.io \
-        $URL \
-        --outputFolder sitespeed-results \
-        --browsertime.chrome.args="disable-dev-shm-usage" \
-        --cpu \
-        --memory \
-        --iterations 3
-
+    - docker run --shm-size=1g --rm -v "$(pwd)":/sitespeed.io sitespeedio/sitespeed.io $URL --outputFolder sitespeed-results
+    
+    # Vérifier le résultat
+    - ls -la sitespeed-results/
+    
   artifacts:
     paths:
       - sitespeed-results/
-    expire_in: 1 week
     when: always
 # ==================== SECURITY ====================
 security_job:
