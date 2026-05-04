@@ -3,7 +3,6 @@ version: '3.8'
 services:
   web:
     build: .
-    container_name: web
     ports:
       - "8080:80"
     volumes:
@@ -15,9 +14,6 @@ services:
 
   db:
     image: mysql:8.0
-    container_name: db
-    ports:
-      - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root_password
       MYSQL_DATABASE: task_management_test
