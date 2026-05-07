@@ -18,15 +18,17 @@ cache:
   key: "$CI_JOB_NAME"
 
 # ==================== BUILD ====================
-build_job:
-  stage: build
+deploy_staging_job:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
   tags:
-    - shell
+    - docker  # Utilise le runner Docker de GitLab
   script:
-    - echo "Build started"
-    - php -l *.php 2>/dev/null || true
-    - find . -name "*.php" -type f -exec php -l {} \;
-    - echo "Build successful"
+    - echo "Deploying to staging..."
+    - docker compose down --remove-orphans || true
+    - docker compose up -d --build
 
 # ==================== TEST ====================
 test_job:
