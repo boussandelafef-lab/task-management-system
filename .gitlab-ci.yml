@@ -111,11 +111,12 @@ quality_job:
 
 package_job:
   stage: package
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache zip
+  tags:
+    - shell
   script:
     - echo "Creating package"
+    - sudo apt-get update
+    - sudo apt-get install -y zip
     - zip -r employee-task-management.zip *.php app/ inc/ css/ assets/ 2>/dev/null || true
     - echo "Package created"
   artifacts:
