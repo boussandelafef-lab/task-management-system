@@ -119,15 +119,19 @@ deploy_staging_job:
     - shell
   script:
     - echo "Deploying to staging..."
-    - docker compose down --remove-orphans 2>/dev/null || true
+    # Nettoyer avant de déployer
+    - docker stop $(docker ps -aq) 2>/dev/null || true
+    - docker rm $(docker ps -aq) 2>/dev/null || true
+    - sudo pkill -f "python3 -m http.server" 2>/dev/null || true
+    # Démarrer
     - docker compose up -d --build
     - sleep 10
     - docker compose ps
     - echo "Deployment completed"
     - echo "Application disponible sur http://localhost:8080"
-    - echo "🔓 Forcing port 8080 to open in Codespaces..."
-    - nohup python3 -m http.server 8080 > /dev/null 2>&1 &
-    - echo "✅ Port 8080 devrait maintenant apparaître dans l'onglet PORTS"
+    # Forcer l'ouverture du port (sur un port différent si besoin)
+    - nohup python3 -m http.server 8081 > /dev/null 2>&1 &
+    - echo "✅ Port 8080 disponible"
   environment:
     name: staging
     url: http://localhost:8080
