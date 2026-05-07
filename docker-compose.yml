@@ -11,6 +11,11 @@ services:
       - db
     networks:
       - app_network
+    environment:
+      DB_HOST: db
+      DB_USER: root
+      DB_PASSWORD: root_password
+      DB_NAME: task_management_test
 
   db:
     image: mysql:8.0
