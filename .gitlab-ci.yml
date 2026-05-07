@@ -16,23 +16,17 @@ variables:
   DOCKER_HOST: tcp://docker:2375
   DOCKER_TLS_CERTDIR: ""
 
-# ==================== BUILD ====================
 build_job:
   stage: build
   image: php:8.2-cli-alpine
-  tags:
-    - shell
   script:
     - echo "Build started"
     - find . -name "*.php" -type f -exec php -l {} \;
     - echo "Build successful"
 
-# ==================== TEST (vos tests inchangés) ====================
 test_job:
   stage: test
   image: php:8.2-cli-alpine
-  tags:
-    - shell
   services:
     - mysql:8.0
   before_script:
@@ -105,12 +99,9 @@ test_job:
       '
     - echo "E2E TESTS COMPLETED"
 
-# ==================== QUALITY ====================
 quality_job:
   stage: quality
   image: php:8.2-cli-alpine
-  tags:
-    - shell
   allow_failure: true
   script:
     - echo "Quality check"
@@ -118,12 +109,9 @@ quality_job:
     - grep -r "prepare" app/ || echo "Missing prepare"
     - echo "Quality check passed"
 
-# ==================== PACKAGE ====================
 package_job:
   stage: package
   image: alpine:latest
-  tags:
-    - shell
   before_script:
     - apk add --no-cache zip
   script:
