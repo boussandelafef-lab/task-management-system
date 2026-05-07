@@ -32,10 +32,8 @@ test_job:
     - shell
   script:
     - echo "E2E TEST START"
-    # Démarrer MySQL
     - docker run -d --name mysql-test -e MYSQL_ROOT_PASSWORD=root_password -e MYSQL_DATABASE=task_management_test -p 3306:3306 mysql:8.0
     - sleep 15
-    # Créer un fichier PHP temporaire
     - |
       cat > /tmp/test_db.php << 'PHPCODE'
       <?php
@@ -43,7 +41,6 @@ test_job:
           $conn = new PDO("mysql:host=mysql-test;dbname=task_management_test", "root", "root_password");
           $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
           echo "DB Connected\n";
-          
           $conn->exec("CREATE TABLE IF NOT EXISTS users (
               id INT AUTO_INCREMENT PRIMARY KEY,
               full_name VARCHAR(50) NOT NULL,
@@ -52,7 +49,6 @@ test_job:
               role ENUM('admin','employee') NOT NULL
           )");
           echo "Users table OK\n";
-          
           $conn->exec("CREATE TABLE IF NOT EXISTS tasks (
               id INT AUTO_INCREMENT PRIMARY KEY,
               title VARCHAR(100) NOT NULL,
@@ -62,7 +58,6 @@ test_job:
               status ENUM('pending','in_progress','completed') DEFAULT 'pending'
           )");
           echo "Tasks table OK\n";
-          
           $conn->exec("CREATE TABLE IF NOT EXISTS notifications (
               id INT AUTO_INCREMENT PRIMARY KEY,
               message TEXT NOT NULL,
@@ -72,22 +67,17 @@ test_job:
               is_read BOOLEAN DEFAULT FALSE
           )");
           echo "Notifications table OK\n";
-          
           $hash = password_hash("123", PASSWORD_DEFAULT);
           $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES ('Administrator', 'admin', '$hash', 'admin')");
-          
           $hash2 = password_hash("employee123", PASSWORD_DEFAULT);
           $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES ('Sarah Johnson', 'sarah', '$hash2', 'employee')");
-          
           echo "Users created successfully\n";
           echo "E2E TESTS COMPLETED\n";
-          
       } catch (PDOException $e) {
           echo "Error: " . $e->getMessage() . "\n";
           exit(1);
       }
       PHPCODE
-    # Exécuter le script PHP avec l'extension PDO MySQL
     - docker run --rm --link mysql-test:mysql -v $(pwd):/app -v /tmp:/tmp php:8.2-cli-alpine sh -c "docker-php-ext-install pdo_mysql && php /tmp/test_db.php"
     - echo "✅ E2E TESTS COMPLETED"
   after_script:
@@ -122,7 +112,7 @@ package_job:
     paths:
       - employee-task-management.zip
 
-# ==================== DEPLOY ====================
+# ==================== DEPLOY (avec ouverture auto du port) ====================
 deploy_staging_job:
   stage: deploy
   tags:
@@ -135,6 +125,9 @@ deploy_staging_job:
     - docker compose ps
     - echo "Deployment completed"
     - echo "Application disponible sur http://localhost:8080"
+    - echo "🔓 Forcing port 8080 to open in Codespaces..."
+    - nohup python3 -m http.server 8080 > /dev/null 2>&1 &
+    - echo "✅ Port 8080 devrait maintenant apparaître dans l'onglet PORTS"
   environment:
     name: staging
     url: http://localhost:8080
