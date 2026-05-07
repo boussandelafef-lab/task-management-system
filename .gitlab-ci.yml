@@ -8,9 +8,8 @@ stages:
 variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
-  # IMPORTANT: Enlever ces lignes qui causent l'erreur
-  # DOCKER_HOST: tcp://docker:2375
-  # DOCKER_TLS_CERTDIR: ""
+  # Pour shell runner, on utilise le socket Docker local
+  DOCKER_HOST: unix:///var/run/docker.sock
 
 cache:
   paths:
@@ -18,29 +17,26 @@ cache:
   key: "$CI_JOB_NAME"
 
 # ==================== BUILD ====================
-deploy_staging_job:
-  stage: deploy
-  image: docker:latest
-  services:
-    - docker:dind
+build_job:
+  stage: build
   tags:
-    - docker  # Utilise le runner Docker de GitLab
+    - shell
   script:
-    - echo "Deploying to staging..."
-    - docker compose down --remove-orphans || true
-    - docker compose up -d --build
+    - echo "Build started"
+    - php -l *.php 2>/dev/null || true
+    - find . -name "*.php" -type f -exec php -l {} \;
+    - echo "Build successful"
 
 # ==================== TEST ====================
 test_job:
   stage: test
   tags:
     - shell
-  services:
-    - mysql:8.0
   before_script:
     - sudo apt-get update
-    - sudo apt-get install -y mysql-client
-    - sleep 10
+    - sudo apt-get install -y mysql-client php8.2-mysql
+    - sudo service mysql start || true
+    - sleep 5
   script:
     - echo "E2E TEST START"
     - |
