@@ -8,7 +8,6 @@ stages:
 variables:
   MYSQL_DATABASE: task_management_test
   MYSQL_ROOT_PASSWORD: root_password
-  # Pour shell runner, on utilise le socket Docker local
   DOCKER_HOST: unix:///var/run/docker.sock
 
 cache:
@@ -34,8 +33,9 @@ test_job:
     - shell
   before_script:
     - sudo apt-get update
-    - sudo apt-get install -y mysql-client php8.2-mysql
-    - sudo service mysql start || true
+    - sudo apt-get install -y mysql-client
+    # PHP MySQL est déjà installé dans Codespaces
+    - sudo service mysql start 2>/dev/null || true
     - sleep 5
   script:
     - echo "E2E TEST START"
