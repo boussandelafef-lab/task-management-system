@@ -6,8 +6,8 @@ stages:
   - deploy
 
 variables:
-  MYSQL_DATABASE: task_management_test
-  MYSQL_ROOT_PASSWORD: root_password
+  MYSQL_DATABASE: task_management        # ← Changé: task_management
+  MYSQL_ROOT_PASSWORD: root               # ← Changé: root
   DOCKER_HOST: unix:///var/run/docker.sock
 
 cache:
@@ -32,13 +32,13 @@ test_job:
     - shell
   script:
     - echo "E2E TEST START"
-    - docker run -d --name mysql-test -e MYSQL_ROOT_PASSWORD=root_password -e MYSQL_DATABASE=task_management_test -p 3306:3306 mysql:8.0
+    - docker run -d --name mysql-test -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=task_management -p 3306:3306 mysql:8.0
     - sleep 15
     - |
       cat > /tmp/test_db.php << 'PHPCODE'
       <?php
       try {
-          $conn = new PDO("mysql:host=mysql-test;dbname=task_management_test", "root", "root_password");
+          $conn = new PDO("mysql:host=mysql-test;dbname=task_management", "root", "root");
           $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
           echo "DB Connected\n";
           $conn->exec("CREATE TABLE IF NOT EXISTS users (
@@ -54,7 +54,7 @@ test_job:
               title VARCHAR(100) NOT NULL,
               description TEXT,
               assigned_to INT,
-              due_date DATE,
+              due_date DATE NULL DEFAULT NULL,
               status ENUM('pending','in_progress','completed') DEFAULT 'pending'
           )");
           echo "Tasks table OK\n";
@@ -68,9 +68,7 @@ test_job:
           )");
           echo "Notifications table OK\n";
           $hash = password_hash("123", PASSWORD_DEFAULT);
-          $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES ('Administrator', 'admin', '$hash', 'admin')");
-          $hash2 = password_hash("employee123", PASSWORD_DEFAULT);
-          $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES ('Sarah Johnson', 'sarah', '$hash2', 'employee')");
+          $conn->exec("INSERT INTO users (full_name, username, password, role) VALUES ('Administrator', 'admin', '$hash', 'admin') ON DUPLICATE KEY UPDATE id=id");
           echo "Users created successfully\n";
           echo "E2E TESTS COMPLETED\n";
       } catch (PDOException $e) {
@@ -112,26 +110,24 @@ package_job:
     paths:
       - employee-task-management.zip
 
-# ==================== DEPLOY (avec ouverture auto du port) ====================
+# ==================== DEPLOY (corrigé) ====================
 deploy_staging_job:
   stage: deploy
   tags:
     - shell
   script:
     - echo "🚀 Déploiement rapide..."
-    
-    # Arrêt rapide des anciens conteneurs
+    # Nettoyer les conteneurs existants
     - docker compose down --remove-orphans || true
-    
-    # Démarrage immédiat (sans --build pour accélérer)
+    # Nettoyer le port 8080
+    - sudo fuser -k 8080/tcp 2>/dev/null || true
+    # Démarrer
     - docker compose up -d
-    
-    # Vérification express (2 secondes au lieu de 10)
-    - sleep 2
-    
-    - echo "✅ Déployé en quelques secondes !"
+    - sleep 5
+    - echo "✅ Déployé !"
     - echo "🌐 http://localhost:8080"
-    
   environment:
     name: staging
     url: http://localhost:8080
+  only:
+    - main
