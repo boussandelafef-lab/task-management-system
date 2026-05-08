@@ -14,7 +14,7 @@ services:
       DB_NAME: task_management
 
   db:
-    image: mysql:8.0
+    image: mysql:5.7
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: task_management
