@@ -9,27 +9,19 @@ services:
       - .:/var/www/html
     depends_on:
       - db
-    networks:
-      - app_network
     environment:
       DB_HOST: db
       DB_USER: root
-      DB_PASSWORD: root              # ← Change: root (pas root_password)
-      DB_NAME: task_management       # ← Change: task_management (pas task_management_test)
+      DB_PASSWORD: root
+      DB_NAME: task_management
 
   db:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: root      # ← Change: root (pas root_password)
-      MYSQL_DATABASE: task_management # ← Change: task_management (pas task_management_test)
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: task_management
     volumes:
       - db_data:/var/lib/mysql
-    networks:
-      - app_network
 
 volumes:
   db_data:
-
-networks:
-  app_network:
-    driver: bridge
